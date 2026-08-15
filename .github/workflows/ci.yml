@@ -1,0 +1,39 @@
+name: DevOps CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: 05-nginx-reverse-proxy
+        run: npm install
+
+      - name: Check application files
+        working-directory: 05-nginx-reverse-proxy
+        run: |
+          test -f server.js
+          test -f package.json
+          test -f Dockerfile
+
+      - name: Build Docker image
+        working-directory: 05-nginx-reverse-proxy
+        run: docker build -t devops-nginx-app:test .
