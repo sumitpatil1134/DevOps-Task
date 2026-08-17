@@ -1,9 +1,10 @@
-name: DevOps CI
+name: DevOps CI/CD
 
 on:
   push:
     branches:
       - main
+
   pull_request:
     branches:
       - main
@@ -27,28 +28,12 @@ jobs:
         working-directory: 05-nginx-reverse-proxy
         run: npm install
 
+      - name: Run tests
+        working-directory: 05-nginx-reverse-proxy
+        run: npm test
+
       - name: Check application files
-        working-directory: 05-nginx-reverse-proxy      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Push Docker image
         working-directory: 05-nginx-reverse-proxy
-        run: |
-          docker tag devops-nginx-app:test ${{ secrets.DOCKERHUB_USERNAME }}/devops-nginx-app:latest
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/devops-nginx-app:latest      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Push Docker image
-        working-directory: 05-nginx-reverse-proxy
-        run: |
-          docker tag devops-nginx-app:test ${{ secrets.DOCKERHUB_USERNAME }}/devops-nginx-app:latest
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/devops-nginx-app:latest
         run: |
           test -f server.js
           test -f package.json
@@ -56,24 +41,42 @@ jobs:
 
       - name: Build Docker image
         working-directory: 05-nginx-reverse-proxy
-        run: docker build -t devops-nginx-app:test .      - name: Login to Docker Hub
+        run: |
+          docker build \
+            -t ${{ secrets.DOCKERHUB_USERNAME }}/devops-nginx-app:${{ github.sha }} \
+            -t ${{ secrets.DOCKERHUB_USERNAME }}/devops-nginx-app:latest \
+            .
+
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Push Docker image
-        working-directory: 05-nginx-reverse-proxy
         run: |
-          docker tag devops-nginx-app:test ${{ secrets.DOCKERHUB_USERNAME }}/devops-nginx-app:latest
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/devops-nginx-app:latest      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Push Docker image
-        working-directory: 05-nginx-reverse-proxy
-        run: |
-          docker tag devops-nginx-app:test ${{ secrets.DOCKERHUB_USERNAME }}/devops-nginx-app:latest
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/devops-nginx-app:${{ github.sha }}
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/devops-nginx-app:latest
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/devops-app
+
+            docker compose pull app
+
+            docker compose up -d
+
+            docker image prune -f
+
+            docker compose ps
