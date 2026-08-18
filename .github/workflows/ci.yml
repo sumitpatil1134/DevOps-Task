@@ -12,6 +12,7 @@ on:
 jobs:
 
   test:
+    name: Test and Build
     runs-on: ubuntu-latest
 
     steps:
@@ -23,20 +24,23 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: 05-nginx-reverse-proxy/package-lock.json
 
       - name: Install dependencies
         working-directory: 05-nginx-reverse-proxy
-        run: npm install
+        run: npm ci
 
       - name: Run tests
         working-directory: 05-nginx-reverse-proxy
         run: npm test
 
-      - name: Check application files
+      - name: Check required files
         working-directory: 05-nginx-reverse-proxy
         run: |
-          test -f server.js
           test -f package.json
+          test -f package-lock.json
+          test -f server.js
           test -f Dockerfile
 
       - name: Build Docker image
@@ -53,30 +57,10 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Push Docker image
+      - name: Push image with commit SHA
         run: |
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/devops-nginx-app:${{ github.sha }}
+
+      - name: Push latest image
+        run: |
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/devops-nginx-app:latest
-
-  deploy:
-    needs: test
-    runs-on: ubuntu-latest
-
-    steps:
-
-      - name: Deploy to EC2
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            cd ~/devops-app
-
-            docker compose pull app
-
-            docker compose up -d
-
-            docker image prune -f
-
-            docker compose ps
